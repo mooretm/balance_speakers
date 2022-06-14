@@ -76,7 +76,7 @@ def mk_wgn():
     """ Function to generate white Gaussian noise.
     """
     fs = 48000
-    dur=3
+    dur=10
     syslevel = float(ent_sysvolume.get())
     # Set random seed
     # This ensures the same random values are used to 
@@ -85,7 +85,7 @@ def mk_wgn():
     wgn = [random.gauss(0.0, 1.0) for i in range(fs*dur)]
     wgn = ts.doNormalize(wgn)
     wgn = ts.setRMS(wgn,syslevel)
-    wgn = wgn - np.mean(wgn) # Remove DC offset
+    #wgn = wgn - np.mean(wgn) # Remove DC offset
     return wgn
 
 
@@ -211,7 +211,7 @@ def go_to_next():
 
     # Try to read the SLM value
     try:
-        slm_val = int(ent_slm.get())
+        slm_val = float(ent_slm.get())
     except:
         messagebox.showerror(title="Invalid Level!",
         message="Please enter a valid sound level!")
@@ -271,11 +271,12 @@ def tools_verify_levels():
     # Create white Gaussian noise
     fs = 48000
     dur = 10
-    random.seed(4)
-    wgn = [random.gauss(0.0, 1.0) for i in range(fs*dur)]
-    wgn = ts.doNormalize(wgn)
-    wgn = ts.setRMS(wgn,syslevel)
-    wgn = wgn - np.mean(wgn) # Remove DC offset
+    # random.seed(4)
+    # wgn = [random.gauss(0.0, 1.0) for i in range(fs*dur)]
+    # wgn = ts.doNormalize(wgn)
+    # wgn = ts.setRMS(wgn,syslevel)
+    # wgn = wgn - np.mean(wgn) # Remove DC offset
+    wgn = mk_wgn()
 
     # Find RMS of noise in dB
     wgn_rms_db = ts.mag2db(ts.rms(wgn))
@@ -287,7 +288,7 @@ def tools_verify_levels():
     for key in offset_dict:
         selected_speaker.set(int(key)) # is the screen not updating during/between playback?
         print(f"Speaker {key} offset: {offset_dict[key]}")
-        wgn = ts.setRMS(wgn, (float(wgn_rms_db) - float(offset_dict[key])))
+        wgn = ts.setRMS(wgn, (float(wgn_rms_db) + float(offset_dict[key])))
         print(f"RMS in dB of wgn with offset: {ts.mag2db(ts.rms(wgn))}")
         #wgn_lists.append(wgn)
         sd.play(wgn.T, fs, mapping=int(key))
