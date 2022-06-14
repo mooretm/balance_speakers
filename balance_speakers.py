@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import Toplevel, ttk
 from tkinter import messagebox
+from tkinter import filedialog
 
 import random
 import sys
@@ -62,14 +63,11 @@ def device_check():
         messagebox.showerror(title="No sound device selected!", message="Please select a sound device before continuing!")
         tools_list_audio_devs()
 
-def play_snd():
-    # check for default audio device
-    device_check()
 
-    syslevel = float(ent_sysvolume.get())
-    # Create white Gaussian noise
+def mk_wgn():
     fs = 48000
-    dur = 3
+    dur=3
+    syslevel = float(ent_sysvolume.get())
     # Set random seed
     # This ensures the same random values are used to 
     # generate the noise every time
@@ -79,7 +77,6 @@ def play_snd():
     wgn = ts.setRMS(wgn,syslevel)
     wgn = wgn - np.mean(wgn) # Remove DC offset
     """ Spectral analysis of calibration noise.
-
     # Plot time waveform - original
     plt.subplot(2,2,1)
     plt.plot(wgn)
@@ -109,6 +106,18 @@ def play_snd():
     df.plot.density()
     plt.show()
     """
+    return wgn
+
+
+def play_snd():
+    # check for default audio device
+    device_check()
+
+    syslevel = float(ent_sysvolume.get())
+    # Create white Gaussian noise
+    wgn = mk_wgn()
+    fs = 48000
+    dur = len(wgn) / fs
 
     if syslevel > -10:
         resp = messagebox.askyesnocancel(title="Danger!", 
@@ -236,7 +245,53 @@ btn_Next.grid(column=len(speakers)+1, row=1, **options_sysvolume)
 #### MENU FUNCTIONS ####
 ########################
 def tools_verify_levels():
-    pass
+    # This should be its own function: loads offset file
+    # and stores in dict
+    filename = filedialog.askopenfilename(initialdir=_thisDir)
+    df = pd.read_csv(filename,
+    header=None, index_col=0)
+    offset_dict = df.to_dict()
+    offset_dict = offset_dict[1] # to_dict returns a list, so grab first one
+    #print(offset_dict)
+
+    wgn = mk_wgn()
+    fs = 48000
+    dur = len(wgn) / fs
+    wgn_rms_db = ts.mag2db(ts.rms(wgn))
+    wgn_lists = []
+    for key in offset_dict:
+        print(f"RMS in dB of wgn: {wgn_rms_db}")
+        print(f"Speaker {key} offset: {offset_dict[key]}")
+        wgn = ts.setRMS(wgn, (wgn_rms_db - offset_dict[key]))
+        print(f"RMS in dB of wgn with offset: {ts.mag2db(ts.rms(wgn))}")
+        wgn_lists.append(wgn)
+    wgn_matrix = np.array(wgn_lists)
+
+    snd_file = np.vstack([[wgn_matrix[1]], [wgn_matrix[2]]])
+    t, tone500 = ts.mkTone(250,5)
+    tone500 = ts.doNormalize(tone500)
+    tone500 = ts.setRMS(tone500,0)
+
+    t, tone1000 = ts.mkTone(3000,5)
+    tone1000 = ts.doNormalize(tone1000)
+    tone1000 = ts.setRMS(tone1000,0)
+
+    tones = np.vstack([[tone500], [tone1000]])
+    print(tones.shape)
+
+    print(f"tones.shape[0]: {tones.shape[0]}")
+    for chan in np.array([1,2]):
+        print(chan)
+        tones = tones[chan]
+        #sd.play(snd_file.T,fs,mapping=[1, 2])
+        sd.play(tones.T,fs,mapping=[chan])
+        sd.wait(dur+1)
+
+
+
+
+
+
 
 def file_write_offsets():
     for speaker in speaker_list:
@@ -388,7 +443,7 @@ help_menu.add_command(
 help_menu.add_command(
     label='About',
     command=lambda: messagebox.showinfo(title="About Balance Speakers",
-    message="Version: 1.0.0\nWritten by: Travis M. Moore\nCreated: 06/09/2022\nLast Updated: 06/09/2022")
+    message="Version: 1.0.0\nWritten by: Travis M. Moore\nCreated: 06/09/2022\nLast Updated: 06/10/2022")
 )
 # add the Help menu to the menubar
 menubar.add_cascade(
