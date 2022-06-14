@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import Toplevel, ttk
+from tkinter import Toplevel, ttk, filedialog
 from tkinter import messagebox
 
 import random
@@ -16,8 +16,7 @@ from matplotlib import pyplot as plt
 import sounddevice as sd
 
 # import my library
-#sys.path.append('.\\lib') # Point to custom library file
-sys.path.append('C:\\Users\\MooTra\\Documents\\Code\\Python\\my_packages\\tmpy')
+sys.path.append('.\\lib') # Point to custom library file
 import tmsignals as ts # Custom library
 import importlib 
 importlib.reload(ts) # Reload custom module on every run
@@ -54,6 +53,7 @@ for speaker in speakers:
     speaker_list.append(spkr)
 
 def device_check():
+    global sndDevice
     try:
         sndDevice = pd.read_csv('.\\etc\\Sound_Device.csv')
         sndDevice = int(sndDevice.columns[0])
@@ -119,7 +119,9 @@ def play_snd():
             pass
         if not resp: 
             return
-    sd.play(wgn, fs)
+
+    chan = int(selected_speaker.get())
+    sd.play(wgn, fs, mapping=chan)
     sd.wait(dur)
 
 root = tk.Tk()
@@ -157,7 +159,7 @@ options_sys_widgets = {'pady':(0,10)}
 # Widgets for system volume
 lbl_sysvolume = ttk.Label(frm_sysvolume, text="System Volume: ")
 lbl_sysvolume.grid(column=0, row=0, sticky='e', **options_sys_widgets)
-syslevel = tk.IntVar(value=-30)
+syslevel = tk.IntVar(value=-50)
 ent_sysvolume = ttk.Entry(frm_sysvolume, textvariable=syslevel, width=5)
 ent_sysvolume.grid(column=1, row=0, sticky='w', **options_sys_widgets)
 lbl_play = ttk.Label(frm_sysvolume, text="Calibration Stimulus: ")
@@ -188,8 +190,17 @@ class Updater:
         self.slm_val = slm_val
 
     def update_speaker(self):
-        ref_level = 0
-        speaker_offset = ref_level - self.slm_val
+        #ref_level = 0
+        # ref_level is taken from the SLM reading of SPEAKER 1
+
+        try:
+            speaker_offset = ref_level - self.slm_val
+        except:
+            messagebox.showerror(
+                title="Missing Reference",
+                message="You must start with Speaker 1!"
+            )
+            return
 
         self.Speaker.offset = speaker_offset
         self.Speaker.calibrated = True
@@ -202,6 +213,7 @@ class Updater:
 
 
 def go_to_next():
+    global ref_level
     # Get currently selected speaker
     the_speaker = int(selected_speaker.get())
     #print(f'"The current speaker is: {str(the_speaker)}')
@@ -213,6 +225,10 @@ def go_to_next():
         messagebox.showerror(title="Invalid Level!",
         message="Please enter a valid sound level!")
         return
+
+    # The SLM reading from SPEAKER 1 is used as reference
+    if the_speaker == 1:
+        ref_level = slm_val
 
     # Set next speaker 
     if the_speaker >= len(speaker_list):
@@ -236,7 +252,49 @@ btn_Next.grid(column=len(speakers)+1, row=1, **options_sysvolume)
 #### MENU FUNCTIONS ####
 ########################
 def tools_verify_levels():
-    pass
+    # This should be its own function: loads offset file
+    # and stores in dict
+    filename = filedialog.askopenfilename(initialdir=_thisDir)
+    df = pd.read_csv(filename,
+    header=None, index_col=0)
+    offset_dict = df.to_dict()
+    offset_dict = offset_dict[1] # to_dict returns a list, so grab first one
+
+    device_check()
+    print(f"Setting default sound device to: {sndDevice}")
+
+    syslevel = float(ent_sysvolume.get())
+    # Create white Gaussian noise
+    fs = 48000
+    dur = 3
+    # Set random seed
+    # This ensures the same random values are used to 
+    # generate the noise every time
+    random.seed(4)
+    wgn = [random.gauss(0.0, 1.0) for i in range(fs*dur)]
+    wgn = ts.doNormalize(wgn)
+    wgn = ts.setRMS(wgn,syslevel)
+    wgn = wgn - np.mean(wgn) # Remove DC offset
+
+    wgn_rms_db = ts.mag2db(ts.rms(wgn))
+    print(f"RMS in dB of wgn: {wgn_rms_db}")
+    wgn_lists = []
+    for key in offset_dict:
+        selected_speaker.set(int(key)) # is the screen not updating during/between playback?
+        print(f"Speaker {key} offset: {offset_dict[key]}")
+        wgn = ts.setRMS(wgn, (float(wgn_rms_db) - float(offset_dict[key])))
+        print(f"RMS in dB of wgn with offset: {ts.mag2db(ts.rms(wgn))}")
+        wgn_lists.append(wgn)
+        sd.play(wgn.T, fs, mapping=int(key))
+        sd.wait(dur)
+    wgn_matrix = np.array(wgn_lists)
+
+    #print(f"The shape of wgn_matrix: {wgn_matrix.T.shape}")
+
+    #NEW = np.vstack([wgn_matrix[0],wgn_matrix[1],wgn_matrix[2]])
+
+    #sd.play(NEW.T, fs, mapping=[2,4,6])
+
 
 def file_write_offsets():
     for speaker in speaker_list:
@@ -270,6 +328,7 @@ def tools_list_audio_devs():
     #audDev_win.wm_iconbitmap(img)
 
     def doDevID():
+        global sndDevice
         try:
             sndDevice = int(entDeviceID.get())
             sd.default.device = sndDevice
@@ -303,7 +362,7 @@ def tools_list_audio_devs():
 
     deviceList = sd.query_devices()
     names = [deviceList[x]['name'] for x in np.arange(0,len(deviceList))]
-    chans_in =  [deviceList[x]['max_input_channels'] for x in np.arange(0,len(deviceList))]
+    chans_in =  [deviceList[x]['max_output_channels'] for x in np.arange(0,len(deviceList))]
     ids = np.arange(0,len(deviceList))
     df = pd.DataFrame({"device_id": ids, "name": names,"chans_in": chans_in})
 

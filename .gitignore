@@ -1,3 +1,5 @@
 etc/
 lib/
 __pycache__
+*.csv
+
