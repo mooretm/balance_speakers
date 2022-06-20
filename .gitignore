@@ -1,3 +1,6 @@
 etc/
 __pycache__
 *.csv
+build/
+*.spec
+lib/

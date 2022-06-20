@@ -1,3 +1,14 @@
+""" GUI-based application to balance lab speakers 
+    by creating offsets. Offsets are created in 
+    reference to speaker 1. Offsets are written 
+    to file.
+
+    Version: 1.0.1
+    Written by: Travis M. Moore
+    Created: Jun 9, 2022
+    Last edited: Jun 20, 2022
+"""
+
 # Import GUI packages
 import tkinter as tk
 from tkinter import Toplevel, ttk
@@ -24,7 +35,6 @@ import sounddevice as sd
 import tmsignals as ts # Custom library
 import importlib 
 importlib.reload(ts) # Reload custom module on every run
-
 
 # Initialize default values
 dur = 10
@@ -237,7 +247,7 @@ def go_to_next():
     ent_slm.delete(0, 'end')
 
 
-# Splice button
+# Submit button
 btn_Next = ttk.Button(frm_next_button, text="Submit", command=go_to_next)
 btn_Next.grid(column=len(speakers)+1, row=1, **options_sysvolume)
 
@@ -329,7 +339,25 @@ def file_write_offsets():
 
     now = datetime.now()
     date_stamp = now.strftime("%Y_%b_%d_%H%M")
+    """
     with open('.\\speaker_offsets_' + str(date_stamp) + '.csv', 'w', newline='') as f:
+        for speaker in speaker_list:
+            writer = csv.writer(f)
+            writer.writerow([str(speaker.position), str(speaker.offset)])
+    """
+
+    file_name = 'speaker_offsets_' + str(date_stamp)
+    file_path = filedialog.asksaveasfile(
+        initialfile = file_name,
+        defaultextension='.csv').name
+
+    print(file_path)
+    print(type(file_path))
+
+    if file_path is None:
+        return
+
+    with open(file_path, 'w', newline='') as f:
         for speaker in speaker_list:
             writer = csv.writer(f)
             writer.writerow([str(speaker.position), str(speaker.offset)])
