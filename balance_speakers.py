@@ -1,28 +1,34 @@
+# Import GUI packages
 import tkinter as tk
-from tkinter import Toplevel, ttk, filedialog
+from tkinter import Toplevel, ttk
 from tkinter import messagebox
 from tkinter import filedialog
 
+# Import science packages
+import numpy as np
 import random
+import pandas as pd
+from pandastable import Table
+
+# Import system packages
 import sys
 import os
 import csv
 from datetime import datetime
 
-import numpy as np
-import pandas as pd
-from pandastable import Table
-from matplotlib import pyplot as plt
-
+# Import audio packages
 import sounddevice as sd
 
 # import my library
-sys.path.append('.\\lib') # Point to custom library file
+#sys.path.append('.\\lib') # Point to custom library file
 import tmsignals as ts # Custom library
 import importlib 
 importlib.reload(ts) # Reload custom module on every run
 
-# Define startup values
+
+# Initialize default values
+dur = 10
+fs = 48000
 speakers = np.arange(1,9)
 
 # Ensure that relative paths start from the same directory as this script
@@ -40,11 +46,6 @@ else:
         print("etc folder created successfully.")
     else:
         print("Problem creating etc folder.")
-
-
-# Default variables
-dur = 2
-fs = 48000
 
 
 class Speaker:
