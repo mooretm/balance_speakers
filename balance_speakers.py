@@ -42,6 +42,11 @@ else:
         print("Problem creating etc folder.")
 
 
+# Default variables
+dur = 2
+fs = 48000
+
+
 class Speaker:
     """ Speaker object with position number, offset, and 
     calibrated(boolean) attributes.
@@ -72,20 +77,12 @@ def device_check():
         tools_list_audio_devs()
 
 
-def mk_wgn():
+def mk_wgn(dur, fs):
     """ Function to generate white Gaussian noise.
     """
-    fs = 48000
-    dur=10
-    syslevel = float(ent_sysvolume.get())
-    # Set random seed
-    # This ensures the same random values are used to 
-    # generate the noise every time
     random.seed(4)
     wgn = [random.gauss(0.0, 1.0) for i in range(fs*dur)]
     wgn = ts.doNormalize(wgn)
-    wgn = ts.setRMS(wgn,syslevel)
-    #wgn = wgn - np.mean(wgn) # Remove DC offset
     return wgn
 
 
@@ -93,11 +90,12 @@ def play_snd():
     # check for default audio device
     device_check()
 
-    syslevel = float(ent_sysvolume.get())
     # Create white Gaussian noise
-    wgn = mk_wgn()
-    fs = 48000
-    dur = len(wgn) / fs
+    wgn = mk_wgn(dur, fs)
+    # Get the user-specified volume level
+    syslevel = float(ent_sysvolume.get())
+    # Set wgn level
+    wgn = ts.setRMS(wgn,syslevel)
 
     if syslevel > -10:
         resp = messagebox.askyesnocancel(title="Danger!", 
@@ -113,10 +111,12 @@ def play_snd():
     sd.play(wgn, fs, mapping=chan)
     sd.wait(dur)
 
+# Begin root window
 root = tk.Tk()
 root.title("Balance Speakers")
 root.withdraw()
 
+# Padding
 options_sysvolume = {'padx':10, 'pady':10}
 options_speakers = {'padx':10, 'pady':10}
 options_next = {'padx':10, 'pady':10}
@@ -131,8 +131,6 @@ sep_slm.grid(column=1, row=0, rowspan=1, sticky='ns')
 frm_slm = ttk.Frame(root)
 frm_slm.grid(column=2, row=0, rowspan=2, **options_sysvolume)
 
-#sep_speakers = ttk.Separator(root, orient="horizontal", width=3)
-#sep_speakers.grid(column=0, columnspan=4, row=1, sticky='ew')
 frm_sep_speakers = tk.Frame(root, width=10)
 frm_sep_speakers.grid(column=0, columnspan=4, row=1, sticky="ew")
 frm_sep_speakers["background"] = "gray"
@@ -163,12 +161,16 @@ ent_slm = ttk.Entry(frm_slm, width=5)
 ent_slm.grid(column=1, row=0)
 
 # Widgets for speakers
+radio_list = []
+label_list = []
 selected_speaker = tk.StringVar()
 for idx, speaker in enumerate(speakers):
     lbl_speaker_num = ttk.Label(frm_speakers,text=speaker)
     lbl_speaker_num.grid(column=idx,row=0,padx=(0,5))
+    label_list.append(lbl_speaker_num)
     rad_speaker_num = ttk.Radiobutton(frm_speakers,text='',takefocus=0,value=speaker,variable=selected_speaker)
     rad_speaker_num.grid(column=idx,row=1)
+    radio_list.append(rad_speaker_num)
     if speaker == 1:
         selected_speaker.set(1)
 
@@ -190,11 +192,10 @@ class Updater:
             return
         self.Speaker.offset = speaker_offset
         self.Speaker.calibrated = True
-        #print(f"Speaker {str(self.Speaker.position)} calibrated: {str(self.Speaker.calibrated)}\n")
-        #print(f"Speaker {str(self.Speaker.position)} offset: {str(self.Speaker.offset)}\n")
-        #for speaker in speaker_list:
-        #    print(speaker.calibrated)
-        #print("\n")
+        # Update speaker label color
+        s_green = ttk.Style()
+        s_green.configure('Green.TLabel', foreground='green')
+        label_list[self.Speaker.position-1].config(style="Green.TLabel")
 
 
 def go_to_next():
@@ -207,7 +208,6 @@ def go_to_next():
     global ref_level
     # Get currently selected speaker
     the_speaker = int(selected_speaker.get())
-    #print(f'"The current speaker is: {str(the_speaker)}')
 
     # Try to read the SLM value
     try:
@@ -228,7 +228,7 @@ def go_to_next():
         next_speaker = the_speaker + 1
     selected_speaker.set(next_speaker)
 
-    # Run the updater to store cal values in speaker
+    # Run the updater to store cal values in speaker object
     the_updater = Updater(the_speaker, slm_val)
     the_updater.update_speaker()
 
@@ -265,35 +265,52 @@ def tools_verify_levels():
     device_check()
     print(f"Setting default sound device to: {sndDevice}")
 
-    # Get the system (overall) level from the GUI
-    syslevel = float(ent_sysvolume.get())
-
     # Create white Gaussian noise
-    fs = 48000
-    dur = 10
-    # random.seed(4)
-    # wgn = [random.gauss(0.0, 1.0) for i in range(fs*dur)]
-    # wgn = ts.doNormalize(wgn)
-    # wgn = ts.setRMS(wgn,syslevel)
-    # wgn = wgn - np.mean(wgn) # Remove DC offset
-    wgn = mk_wgn()
+    wgn = mk_wgn(dur, fs)
+    # Get the user-specified volume level
+    syslevel = float(ent_sysvolume.get())
+    # Set wgn level
+    wgn = ts.setRMS(wgn,syslevel)
 
     # Find RMS of noise in dB
     wgn_rms_db = ts.mag2db(ts.rms(wgn))
     print(f"RMS in dB of wgn: {wgn_rms_db}")
 
+    # Disable controls
+    ent_slm.config(state="disabled")
+    ent_sysvolume.config(state="disabled")
+    btn_Next.config(state="disabled")
+    btn_play.config(state="disabled")
+
+    s_orange = ttk.Style()
+    s_orange.configure('Orange.TLabelframe.Label', foreground='orange')
+    s_black = ttk.Style()
+    s_black.configure('Black.TLabelframe.Label', forground='black')
+    frm_speakers.config(text="TESTING OFFSETS", style="Orange.TLabelframe")
+
     # Apply offsets to noise and present, 
     # one speaker at a time
-    #wgn_lists = []
     for key in offset_dict:
-        selected_speaker.set(int(key)) # is the screen not updating during/between playback?
+        for radio in radio_list:
+            radio.config(state="enabled")
+        selected_speaker.set(int(key))
+        for radio in radio_list:
+            radio.config(state="disabled")
+        root.update_idletasks()
         print(f"Speaker {key} offset: {offset_dict[key]}")
         wgn = ts.setRMS(wgn, (float(wgn_rms_db) + float(offset_dict[key])))
         print(f"RMS in dB of wgn with offset: {ts.mag2db(ts.rms(wgn))}")
-        #wgn_lists.append(wgn)
         sd.play(wgn.T, fs, mapping=int(key))
         sd.wait(dur)
-    #wgn_matrix = np.array(wgn_lists)
+
+    # Enable controls
+    ent_slm.config(state="enabled")
+    ent_sysvolume.config(state="endabled")
+    btn_Next.config(state="enabled")
+    btn_play.config(state="enabled")
+    for radio in radio_list:
+        radio.config(state="enabled")
+    frm_speakers.config(text="Speaker Number", style="Black.TLabelframe")
 
 
 def file_write_offsets():
@@ -327,7 +344,6 @@ def tools_list_audio_devs():
     audDev_win = Toplevel(root)
     audDev_win.title('Audio Device List')
     audDev_win.withdraw()
-    #audDev_win.wm_iconbitmap(img)
 
     def doDevID():
         global sndDevice
@@ -447,7 +463,7 @@ help_menu = tk.Menu(
 help_menu.add_command(
     label='About',
     command=lambda: messagebox.showinfo(title="About Balance Speakers",
-    message="Version: 1.0.0\nWritten by: Travis M. Moore\nCreated: 06/09/2022\nLast Updated: 06/10/2022")
+    message="Version: 1.0.1\nWritten by: Travis M. Moore\nCreated: 06/09/2022\nLast Updated: 06/20/2022")
 )
 # add the Help menu to the menubar
 menubar.add_cascade(
